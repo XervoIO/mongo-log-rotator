@@ -1,0 +1,17 @@
+{
+  "name": "mongo-log-rotator",
+  "version": "0.1.0",
+  "description": "Rotates MongoDB logs using cron-like scheduling.",
+  "main": "rotator.js",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/onmodulus/mongo-log-rotator.git"
+  },
+  "author": "Brandon Cannaday <brandon@modulus.io>",
+  "license": "BSD",
+  "readmeFilename": "README.md",
+  "dependencies": {
+    "cron" : "1.0.x",
+    "mongodb" : "1.2.x"
+  }
+}
