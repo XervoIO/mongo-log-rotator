@@ -1,14 +1,17 @@
-var MongoClient = require('mongodb').MongoClient;
+var MongoClient = require('mongodb').MongoClient,
+    util = require('util'),
+    EventEmitter = require('events').EventEmitter;
 
 //-------------------------------------------------------------------------------------------------
 /**
  * Handles access to MongoDB.
- * @param {string} url MongoDB connection string.
  */
 //-------------------------------------------------------------------------------------------------
-var DB = function(url) {
-  this.url = url;
+var DB = function() {
+
 };
+
+util.inherits(DB, EventEmitter);
 
 //-------------------------------------------------------------------------------------------------
 /**
@@ -16,8 +19,11 @@ var DB = function(url) {
  * @param {function} callback Params include err and logRotate command response.
  */
 //-------------------------------------------------------------------------------------------------
-DB.prototype.rotate = function(callback) {
-  MongoClient.connect(this.url, function(err, db) {
+DB.prototype.rotate = function(url, callback) {
+
+  this.emit('debug', 'Rotating log at Mongo: ' + url);
+
+  MongoClient.connect(url, function(err, db) {
     if(err) {
       return callback(err);
     }

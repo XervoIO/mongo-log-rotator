@@ -12,6 +12,8 @@
   "readmeFilename": "README.md",
   "dependencies": {
     "cron" : "1.0.x",
-    "mongodb" : "1.2.x"
+    "mongodb" : "1.2.x",
+    "archiver" : "0.4.x",
+    "async" : "0.2.x"
   }
 }

@@ -1,7 +1,9 @@
 var util = require('util'),
     EventEmitter = require('events').EventEmitter,
-    DB = require('./DB'),
-    cronJob = require('cron').CronJob;
+    DB = require('./db'),
+    File = require('./file'),
+    cronJob = require('cron').CronJob,
+    async = require('async');
 
 //-------------------------------------------------------------------------------------------------
 /**
@@ -11,15 +13,37 @@ var util = require('util'),
  * string must include credentials for the admin database. Required.
  * @param {string} [options.mongoLog] Path to the mongo log. Only applies if mongo is running
  * locally. Rotator will return path to "rotated" file if it can. Optional.
- * @param {boolean} [options.autoStart] Whether or not to automatically start. 
+ * @param {boolean} [options.autoStart] Whether or not to automatically start.
  * Defaults to true. Optional.
+ * @param {boolean} [options.s3Upload] Whether or not upload old log data to S3.
+ * Defaults to false. Optional.
+ * @param {string} [options.awsAccessKeyID] AWS access key ID for S3 upload support. Optional.
+ * @param {string} [options.awsSecretAccessKey] AWS secret access key for S3 support. Optional.
+ * @param {string} [options.s3Bucket] Name of the S3 bucket to upload log files to. Optional.
+ * @param {boolean} [options.compress] Whether or not compress old log data. 
+ * Defaults to false. Optional.
+ * @param {boolean} [options.autoDelete] Whether or not to delete old log data after rotate.
+ * Defaults to false. Optional.
  * @throws {exception} Throws exception if schedule is invalid.
  */
 //-------------------------------------------------------------------------------------------------
 var Rotator = function(schedule, options) {
   var self = this;
-  this.db = new DB(options.mongoURL);
-  options = this.initOptions(options);
+  this.options = this.initOptions(options);
+
+  this.db = new DB();
+  this.file = new File(options.mongoLog, 
+    { awsAccessKeyID: options.awsAccessKeyID, 
+      awsSecretAccessKey: options.awsSecretAccessKey
+  });
+
+  this.file.on('debug', function(msg) {
+    self.emit('debug', msg);
+  });
+
+  this.db.on('debug', function(msg) {
+    self.emit('debug', msg);
+  });
 
   this.cron = new cronJob(schedule, function() {
     self.rotate();
@@ -39,9 +63,14 @@ util.inherits(Rotator, EventEmitter);
 //-------------------------------------------------------------------------------------------------
 Rotator.prototype.initOptions = function(options) {
   options = options || {};
-  if(typeof options.autoStart !== 'boolean') {
-    options.autoStart = true;
-  }
+  options.mongoURL = options.mongoURL || 'mongo://localhost:27017';
+  options.mongoLog = options.mongoLog;
+  options.autoStart = options.autoStart || false;
+  options.s3Upload = options.s3Upload || false;
+  options.awsAccessKeyID = options.awsAccessKeyID;
+  options.awsSecretAccessKey = options.awsSecretAccessKey;
+  options.compress = options.compress || false;
+  options.autoDelete = options.autoDelete || false;
 
   return options;
 };
@@ -51,15 +80,69 @@ Rotator.prototype.initOptions = function(options) {
  * Invoked by cron to rotate the logs.
  */
 //-------------------------------------------------------------------------------------------------
-Rotator.prototype.rotate = function() {
+Rotator.prototype.rotate = function(callback) {
 
   var self = this;
 
-  this.db.rotate(function(err, result) {
-    console.log(err);
-    console.log(result);
-    self.emit('rotate');
+  async.waterfall([
+    // Send rotate command to mongo.
+    function(callback) {
+      self.db.rotate(self.options.mongoURL, callback);
+    },
+    // Find the new log file.
+    function(result, callback) {
+      self.file.find(self.options.mongoLog, callback);
+    },
+    // Compress log file.
+    function(result, callback) {
+      if(self.options.compress) {
+        var output = self.setCompressedFileName(result);
+        self.file.compress(result, output, callback);
+      }
+      else {
+        callback(null, result);
+      }
+    },
+    // Upload file to S3.
+    function(result, callback) {
+      if(self.options.s3Upload) {
+        var output = self.setS3FileName(result);
+        self.file.upload(result, output, self.options.s3Bucket, callback);
+      }
+      else {
+        callback(null, result);
+      }
+    }
+  ], function(err, result) {
+    if(err) {
+      console.log(err);
+      self.emit('error', err);
+    }
+    else {
+      self.emit('rotate', result);
+    }
+    callback(err, result);
   });
+};
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Allows users to override the name of the file before being uploaded to S3.
+ * @param {string} original The original filename.
+ */
+//-------------------------------------------------------------------------------------------------
+Rotator.prototype.setS3FileName = function(original) {
+  return original;
+};
+
+//-------------------------------------------------------------------------------------------------
+/**
+ * Allows users to override the name and path of the compressed file.
+ * @param {string} original The original filename.
+ */
+//-------------------------------------------------------------------------------------------------
+Rotator.prototype.setCompressedFileName = function(original) {
+  return original + '.tar.gz';
 };
 
 //-------------------------------------------------------------------------------------------------
