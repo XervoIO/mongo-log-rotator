@@ -1,5 +1,4 @@
-var Rotator = require(__dirname + '/../rotator.js'),
-    async = require('async');
+var Rotator = require(__dirname + '/../rotator.js');
 
 
 // Every 30 seconds. Rotate, compress, upload to s3, and delete.
