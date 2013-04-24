@@ -1,4 +1,5 @@
 var util = require('util'),
+    path = require('path'),
     EventEmitter = require('events').EventEmitter,
     DB = require('./db'),
     File = require('./file'),
@@ -32,13 +33,19 @@ var Rotator = function(schedule, options) {
   this.options = this.initOptions(options);
 
   this.db = new DB();
-  this.file = new File(options.mongoLog, 
-    { awsAccessKeyID: options.awsAccessKeyID, 
-      awsSecretAccessKey: options.awsSecretAccessKey
-  });
+  this.file = new File({
+      awsAccessKeyID: options.awsAccessKeyID,
+      awsSecretAccessKey: options.awsSecretAccessKey,
+      bucket: options.s3Bucket
+    }
+  );
 
   this.file.on('debug', function(msg) {
     self.emit('debug', msg);
+  });
+
+  this.file.on('error', function(err) {
+    self.emit('error', err);
   });
 
   this.db.on('debug', function(msg) {
@@ -112,6 +119,14 @@ Rotator.prototype.rotate = function(callback) {
       else {
         callback(null, result);
       }
+    },
+    function(result, callback) {
+      if(self.options.autoDelete) {
+        self.file.remove(result, callback);
+      }
+      else {
+        callback(null, result);
+      }
     }
   ], function(err, result) {
     if(err) {
@@ -121,7 +136,9 @@ Rotator.prototype.rotate = function(callback) {
     else {
       self.emit('rotate', result);
     }
-    callback(err, result);
+    if(callback) {
+      callback(err, result);
+    }
   });
 };
 
@@ -132,7 +149,7 @@ Rotator.prototype.rotate = function(callback) {
  */
 //-------------------------------------------------------------------------------------------------
 Rotator.prototype.setS3FileName = function(original) {
-  return original;
+  return path.basename(original);
 };
 
 //-------------------------------------------------------------------------------------------------

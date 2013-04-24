@@ -4,19 +4,28 @@ var archiver = require('archiver'),
     fs = require('fs'),
     path = require('path'),
     async = require('async'),
+    knox = require('knox'),
     EventEmitter = require('events').EventEmitter;
 
 //-------------------------------------------------------------------------------------------------
 /**
  * Handles Mongo log files. Tars and uploads to S3.
- * @param {string} [awsCreds.awsAccessKeyID] AWS access key ID for S3 upload support. Optional.
- * @param {string} [awsCreds.awsSecretAccessKey] AWS secret access key for S3 support. Optional.
+ * @param {string} [aws.awsAccessKeyID] AWS access key ID for S3 upload support. Optional.
+ * @param {string} [aws.awsSecretAccessKey] AWS secret access key for S3 support. Optional.
+ * @param {string} [aws.bucket] AWS S3 bucket to upload logs files to. Optional.
  */
 //-------------------------------------------------------------------------------------------------
-var File = function(awsCreds) {
+var File = function(aws) {
 
-  this.awsCred = awsCreds;
+  var self = this;
 
+  if(aws.awsAccessKeyID && aws.awsSecretAccessKey && aws.bucket) {
+    this.s3Client = knox.createClient({
+      key: aws.awsAccessKeyID,
+      secret: aws.awsSecretAccessKey,
+      bucket: aws.bucket
+    });
+  }
 };
 
 util.inherits(File, EventEmitter);
@@ -110,37 +119,62 @@ File.prototype.compress = function(input, output, callback) {
   archive.finalize(function(err, written) {
     if(err) {
       self.debug('archive error: ' + err);
-      return callback(err);
+      callback(err);
     }
 
     self.debug('File compressed. ' + written + ' bytes. Saved to: ' + output);
-    callback(null, output);
+  });
+
+  // Need to wait for close event. The file is not complete when the
+  // finalize callback is called.
+  outputStream.on('close', function() {
+
+    // Delete the input file, now that it's compressed.
+    fs.unlink(input, function(err) {
+      callback(err, output);
+    });
   });
 
 };
 
 //-------------------------------------------------------------------------------------------------
 File.prototype.upload = function(input, output, bucket, callback) {
+
+  var self = this;
+
   if(!input || !output) {
     this.debug('Input or output file not specified. Cannot upload to S3.');
     return callback(null, null);
   }
 
-  this.debug('File uploaded to S3: ' + bucket + ':' + output);
-  callback(null, input);
+  if(!this.s3Client) {
+    this.debug('S3 credentials not provided. Cannot upload to s3.');
+    return callback(null, null);
+  }
+
+  self.debug('Uploading ' + input + ' to ' + bucket + ': ' + output);
+  
+  this.s3Client.putFile(input, output, function(err, result) {
+    self.debug('Upload complete.');
+    callback(err, input);
+  });
 };
 
 //-------------------------------------------------------------------------------------------------
-File.prototype.remove = function(file, callback) {
-  if(!file) {
+File.prototype.remove = function(input, callback) {
+  if(!input) {
     this.debug('File not specified. Cannot delete.');
     return callback(null, null);
   }
 
-  this.debug('File deleted.');
-  callback(null, file);
+  this.debug('Deleting file: ' + input);
+
+  fs.unlink(input, function(err) {
+    callback(err, input);
+  });
 };
 
+//-------------------------------------------------------------------------------------------------
 File.prototype.debug = function(msg) {
   this.emit('debug', msg);
 };

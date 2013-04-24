@@ -3,11 +3,18 @@ var Rotator = require(__dirname + '/../rotator.js'),
 
 
 var rotator = new Rotator('* * * * * *', {
-  autoStart: false
+  autoStart: false,
+  s3Bucket: 'myBucket',
+  awsAccessKeyID: 'xxxxxxxx',
+  awsSecretAccessKey: 'xxxxxxxx'
 });
 
 rotator.on('debug', function(msg) {
   console.log(msg);
+});
+
+rotator.on('error', function(err) {
+  console.log(err);
 });
 
 rotator.on('rotate', function(file) {
@@ -35,6 +42,15 @@ async.series([
     //
     rotator.options.mongoLog = '/opt/mongo/mongo.log';
     rotator.options.compress = true;
+    rotator.rotate(function() { setTimeout(callback, 5000); });
+  },
+  function(callback) {
+    //
+    // Standard rotate, log file specified, compressed, uploaded.
+    //
+    rotator.options.mongoLog = '/opt/mongo/mongo.log';
+    rotator.options.compress = true;
+    rotator.options.s3Upload = true;
     rotator.rotate(function() { setTimeout(callback, 5000); });
   }
 ]);
