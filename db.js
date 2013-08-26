@@ -29,11 +29,29 @@ DB.prototype.rotate = function(url, callback) {
     }
 
     var admin = db.admin();
-    admin.command({ logRotate: 1 }, function(err, result) {
-      db.close();
-      callback(err, result);
-    });
 
+    var returnVal = {};
+
+    // Get the mongo version.
+    admin.buildInfo(function(err, result) {
+      if(err) {
+        db.close();
+        return callback(err);
+      }
+
+      returnVal.version = result;
+
+      // Issue log rotate command.
+      admin.command({ logRotate: 1 }, function(err, result) {
+        if(err) {
+          db.close();
+          return callback(err);
+        }
+        returnVal.rotateResult = result;
+        callback(null, returnVal);
+        
+      });
+    });
   });
 };
 

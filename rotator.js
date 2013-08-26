@@ -91,6 +91,11 @@ Rotator.prototype.rotate = function(callback) {
 
   var self = this;
 
+  var returnVal = {
+    version: null,
+    file: null
+  };
+
   async.waterfall([
     // Send rotate command to mongo.
     function(callback) {
@@ -98,6 +103,7 @@ Rotator.prototype.rotate = function(callback) {
     },
     // Find the new log file.
     function(result, callback) {
+      returnVal.version = result.version.version;
       self.file.find(self.options.mongoLog, callback);
     },
     // Compress log file.
@@ -129,15 +135,16 @@ Rotator.prototype.rotate = function(callback) {
       }
     }
   ], function(err, result) {
+    returnVal.file = result;
     if(err) {
       console.log(err);
       self.emit('error', err);
     }
     else {
-      self.emit('rotate', result);
+      self.emit('rotate', returnVal);
     }
     if(callback) {
-      callback(err, result);
+      callback(err, returnVal);
     }
   });
 };
