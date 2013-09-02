@@ -1,6 +1,6 @@
 {
   "name": "mongo-log-rotator",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Rotates MongoDB logs using cron-like scheduling.",
   "main": "rotator.js",
   "repository": {
