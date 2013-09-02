@@ -43,8 +43,10 @@ DB.prototype.rotate = function(url, callback) {
 
       // Issue log rotate command.
       admin.command({ logRotate: 1 }, function(err, result) {
+
+        db.close();
+
         if(err) {
-          db.close();
           return callback(err);
         }
         returnVal.rotateResult = result;
